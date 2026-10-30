@@ -1,25 +1,16 @@
 import React from 'react';
-import {
-  Activity,
-  Layers,
-  Cpu,
-  CheckCircle,
-  FileText
-} from 'lucide-react';
-import { GPUStats, MediaMetadata, ReconstructionSettings } from '../types';
-import { formatNumber } from '../utils/formatters';
+import { Activity, Cpu, CheckCircle, Layers, Box } from 'lucide-react';
+import { GPUStats, StudioModule } from '../types';
 
 interface BottomStatusBarProps {
+  currentModule: StudioModule;
   stats: GPUStats;
-  metadata: MediaMetadata;
-  settings: ReconstructionSettings;
   exportStatus: string | null;
 }
 
 export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
+  currentModule,
   stats,
-  metadata,
-  settings,
   exportStatus,
 }) => {
   const isHealthyFps = stats.fps >= 50;
@@ -30,13 +21,13 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
       <div className="flex items-center space-x-3 truncate">
         <div className="flex items-center space-x-1.5 text-emerald-400">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-medium">ENGINE READY</span>
+          <span className="font-medium">SYSTEM READY</span>
         </div>
 
         <span className="text-studio-border hidden sm:inline">•</span>
 
         <span className="hidden sm:inline text-slate-300">
-          Pipeline: GLSL Vertex Displacement ({settings.depthMethod.toUpperCase()})
+          Active Pipeline: {currentModule === 'world' ? 'GLSL Vertex Displacement' : 'WebGL2 3D Volume Ray-Casting'}
         </span>
 
         {exportStatus && (
@@ -52,38 +43,30 @@ export const BottomStatusBar: React.FC<BottomStatusBarProps> = ({
 
       {/* Right Metrics */}
       <div className="flex items-center space-x-4">
-        {/* Dimensions */}
-        <div className="hidden md:flex items-center space-x-1">
-          <FileText className="w-3 h-3 text-studio-dim" />
-          <span className="text-slate-400">Input:</span>
-          <span className="text-slate-200">{metadata.width}×{metadata.height}</span>
+        <div className="hidden md:flex items-center space-x-1 text-slate-400">
+          {currentModule === 'world' ? (
+            <Layers className="w-3 h-3 text-cyan-400" />
+          ) : (
+            <Box className="w-3 h-3 text-blue-400" />
+          )}
+          <span className="uppercase">{currentModule} MODE</span>
         </div>
 
         <span className="text-studio-border hidden md:inline">•</span>
 
-        {/* Rendered Points */}
-        <div className="flex items-center space-x-1">
-          <Layers className="w-3 h-3 text-studio-dim" />
-          <span className="text-slate-400 hidden sm:inline">Rendered Points:</span>
-          <span className="text-cyan-300 font-semibold">{formatNumber(stats.pointCount || (settings.resolution * settings.resolution))}</span>
-        </div>
-
-        <span className="text-studio-border">•</span>
-
-        {/* FPS */}
         <div className="flex items-center space-x-1">
           <Activity className="w-3 h-3 text-blue-400" />
           <span className={isHealthyFps ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
             {stats.fps} FPS
           </span>
+          <span className="text-studio-dim text-[10px]">({stats.frameTimeMs}ms)</span>
         </div>
 
         <span className="text-studio-border">•</span>
 
-        {/* GPU Status */}
         <div className="flex items-center space-x-1 text-slate-300">
           <Cpu className="w-3 h-3 text-cyan-400" />
-          <span className="hidden lg:inline">{stats.isWebGL2 ? 'WebGL2 Accelerated' : 'Software Fallback'}</span>
+          <span className="hidden lg:inline">{stats.isWebGL2 ? 'WebGL 2.0 Accelerated' : 'Software Fallback'}</span>
         </div>
       </div>
     </footer>

@@ -1,23 +1,29 @@
+// Shared High-Performance WebGL2 Three.js Renderer for NeuroVision 3D
+// Manages WebGL2 Rendering Context, OrbitControls, Camera, Lighting, and Hardware Telemetry.
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { GPUStats, ReconstructionSettings, ViewportMode } from '../types';
+import { GPUStats } from '../types';
 
 export class EngineRenderer {
   public canvas: HTMLCanvasElement;
   public renderer: THREE.WebGLRenderer | null = null;
-  public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
   public controls: OrbitControls | null = null;
-  public gridHelper: THREE.GridHelper | null = null;
-  public axesHelper: THREE.AxesHelper | null = null;
+
+  // Active scene pointer (swappable between World and Medical scenes)
+  public activeScene: THREE.Scene;
+  public gridHelper: THREE.GridHelper;
+  public axesHelper: THREE.AxesHelper;
+  public dirLight: THREE.DirectionalLight;
+  public ambLight: THREE.AmbientLight;
 
   private isWebGL2Supported = false;
-  private rendererInfo: { renderer: string; vendor: string; glVersion: string; slVersion: string; hasTimerQuery: boolean } = {
-    renderer: 'Unknown',
-    vendor: 'Unknown',
-    glVersion: 'Unknown',
-    slVersion: 'Unknown',
-    hasTimerQuery: false,
+  private rendererInfo = {
+    renderer: 'Hardware GPU',
+    vendor: 'Unmasked Vendor',
+    glVersion: 'WebGL 2.0',
+    slVersion: 'GLSL ES 3.00',
   };
 
   private animationFrameId: number | null = null;
@@ -30,33 +36,52 @@ export class EngineRenderer {
 
   private onStatsCallback?: (stats: GPUStats) => void;
 
-  constructor(canvas: HTMLCanvasElement, onStats?: (stats: GPUStats) => void) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    initialScene: THREE.Scene,
+    onStats?: (stats: GPUStats) => void
+  ) {
     this.canvas = canvas;
+    this.activeScene = initialScene;
     this.onStatsCallback = onStats;
 
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color('#0B0E13');
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 100);
+    this.camera.position.set(0, 0, 2.8);
 
-    // Camera with 60 deg FOV, aspect set later
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
-    this.camera.position.set(0, 0, 3.2);
+    // Helpers
+    this.gridHelper = new THREE.GridHelper(3.5, 18, 0x3b82f6, 0x1e293b);
+    this.gridHelper.rotation.x = Math.PI / 2;
+    this.gridHelper.position.z = -0.05;
+
+    this.axesHelper = new THREE.AxesHelper(0.8);
+
+    // Lights
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    this.dirLight.position.set(2, 4, 3);
+
+    this.ambLight = new THREE.AmbientLight(0xffffff, 0.4);
 
     this.initWebGL2Renderer();
   }
 
   private initWebGL2Renderer(): boolean {
-    // Probe for WebGL2 capability
-    const testContext = this.canvas.getContext('webgl2');
+    const testContext = this.canvas.getContext('webgl2', {
+      alpha: false,
+      antialias: true,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: false,
+    });
+
     if (!testContext) {
       this.isWebGL2Supported = false;
       return false;
     }
     this.isWebGL2Supported = true;
 
-    // Detect actual hardware renderer and unmasked vendor
+    // Detect unmasked hardware GPU
     const debugInfo = testContext.getExtension('WEBGL_debug_renderer_info');
     if (debugInfo) {
-      this.rendererInfo.vendor = testContext.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || 'Browser WebGL2';
+      this.rendererInfo.vendor = testContext.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || 'Browser Vendor';
       this.rendererInfo.renderer = testContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || 'GPU Accelerator';
     } else {
       this.rendererInfo.vendor = testContext.getParameter(testContext.VENDOR) || 'WebGL2 Vendor';
@@ -65,7 +90,6 @@ export class EngineRenderer {
 
     this.rendererInfo.glVersion = testContext.getParameter(testContext.VERSION) || 'WebGL 2.0';
     this.rendererInfo.slVersion = testContext.getParameter(testContext.SHADING_LANGUAGE_VERSION) || 'GLSL ES 3.00';
-    this.rendererInfo.hasTimerQuery = !!testContext.getExtension('EXT_disjoint_timer_query_webgl2');
 
     try {
       this.renderer = new THREE.WebGLRenderer({
@@ -78,26 +102,17 @@ export class EngineRenderer {
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-      // OrbitControls for intuitive navigation
+      // OrbitControls for 3D interaction
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
       this.controls.dampingFactor = 0.05;
       this.controls.rotateSpeed = 0.8;
       this.controls.zoomSpeed = 1.0;
       this.controls.panSpeed = 0.8;
-      this.controls.minDistance = 0.5;
-      this.controls.maxDistance = 20;
+      this.controls.minDistance = 0.2;
+      this.controls.maxDistance = 25;
 
-      // Coordinate axes & Ground Grid
-      this.gridHelper = new THREE.GridHelper(4, 20, 0x3b82f6, 0x1e293b);
-      this.gridHelper.rotation.x = Math.PI / 2;
-      this.gridHelper.position.z = -0.05;
-      this.scene.add(this.gridHelper);
-
-      this.axesHelper = new THREE.AxesHelper(1.2);
-      this.scene.add(this.axesHelper);
-
-      this.setupContextLossHandling();
+      this.attachHelpersAndLights(this.activeScene);
       return true;
     } catch (err) {
       console.error('Failed to initialize WebGL2 renderer:', err);
@@ -106,26 +121,36 @@ export class EngineRenderer {
     }
   }
 
-  private setupContextLossHandling() {
-    this.canvas.addEventListener(
-      'webglcontextlost',
-      (e) => {
-        e.preventDefault();
-        console.warn('WebGL context lost. Pausing rendering.');
-        this.stop();
-      },
-      false
-    );
+  /**
+   * Switches the active scene without destroying the WebGL2 context
+   */
+  public switchScene(newScene: THREE.Scene, defaultCameraDist = 2.8) {
+    if (this.activeScene) {
+      this.detachHelpersAndLights(this.activeScene);
+    }
+    this.activeScene = newScene;
+    this.attachHelpersAndLights(newScene);
 
-    this.canvas.addEventListener(
-      'webglcontextrestored',
-      () => {
-        console.info('WebGL context restored. Reinitializing pipeline.');
-        this.initWebGL2Renderer();
-        this.start();
-      },
-      false
-    );
+    this.camera.position.set(0, 0, defaultCameraDist);
+    this.camera.lookAt(0, 0, 0);
+    if (this.controls) {
+      this.controls.target.set(0, 0, 0);
+      this.controls.update();
+    }
+  }
+
+  private attachHelpersAndLights(scene: THREE.Scene) {
+    scene.add(this.gridHelper);
+    scene.add(this.axesHelper);
+    scene.add(this.dirLight);
+    scene.add(this.ambLight);
+  }
+
+  private detachHelpersAndLights(scene: THREE.Scene) {
+    scene.remove(this.gridHelper);
+    scene.remove(this.axesHelper);
+    scene.remove(this.dirLight);
+    scene.remove(this.ambLight);
   }
 
   public resize(width: number, height: number) {
@@ -135,8 +160,8 @@ export class EngineRenderer {
     this.renderer.setSize(width, height, false);
   }
 
-  public resetCamera() {
-    this.camera.position.set(0, 0, 3.2);
+  public resetCamera(targetDist = 2.8) {
+    this.camera.position.set(0, 0, targetDist);
     this.camera.lookAt(0, 0, 0);
     if (this.controls) {
       this.controls.target.set(0, 0, 0);
@@ -144,55 +169,27 @@ export class EngineRenderer {
     }
   }
 
-  public applySettings(settings: ReconstructionSettings, viewportMode: ViewportMode) {
-    if (this.scene) {
-      this.scene.background = new THREE.Color(settings.backgroundColor);
-    }
-
-    if (this.controls) {
-      this.controls.autoRotate = settings.autoRotate;
-      this.controls.autoRotateSpeed = 1.8;
-    }
-
-    const showGrid = (viewportMode === 'pointcloud-grid' || settings.showGrid) && viewportMode !== 'original' && viewportMode !== 'depthmap';
-    if (this.gridHelper) {
-      this.gridHelper.visible = showGrid;
-    }
-
-    if (this.axesHelper) {
-      this.axesHelper.visible = settings.showAxes && viewportMode !== 'original' && viewportMode !== 'depthmap';
-    }
-  }
-
-  public start(onRenderTick?: (timeSec: number) => void) {
+  public start() {
     if (this.isRunning) return;
     this.isRunning = true;
-
-    const clock = new THREE.Clock();
 
     const loop = () => {
       if (!this.isRunning) return;
       this.animationFrameId = requestAnimationFrame(loop);
 
       const frameStart = performance.now();
-      const elapsedSec = clock.getElapsedTime();
 
       if (this.controls) {
         this.controls.update();
       }
 
-      if (onRenderTick) {
-        onRenderTick(elapsedSec);
-      }
-
-      if (this.renderer) {
-        this.renderer.render(this.scene, this.camera);
+      if (this.renderer && this.activeScene) {
+        this.renderer.render(this.activeScene, this.camera);
       }
 
       const frameEnd = performance.now();
       const frameDuration = frameEnd - frameStart;
 
-      // FPS tracking
       this.frameCount++;
       this.fpsAccumulator += (1000.0 / Math.max(frameDuration, 1.0));
 
@@ -211,12 +208,12 @@ export class EngineRenderer {
             vendorName: this.rendererInfo.vendor,
             fps: Math.min(this.currentFps, 120),
             frameTimeMs: this.currentFrameTimeMs,
-            pointCount: info.render.points,
             drawCalls: info.render.calls,
-            geometriesCount: info.memory.geometries,
+            verticesCount: info.render.triangles * 3 + info.render.points,
+            trianglesCount: info.render.triangles,
+            pointCount: info.render.points,
             texturesCount: info.memory.textures,
-            estimatedBufferBytes: info.render.points * 20,
-            hasTimerQuery: this.rendererInfo.hasTimerQuery,
+            estimatedVramBytes: (info.render.triangles * 3 + info.render.points) * 24,
             glVersion: this.rendererInfo.glVersion,
             shadingLanguageVersion: this.rendererInfo.slVersion,
           });
@@ -253,13 +250,8 @@ export class EngineRenderer {
       this.renderer.dispose();
       this.renderer = null;
     }
-    if (this.gridHelper) {
-      this.scene.remove(this.gridHelper);
-      this.gridHelper.geometry.dispose();
-    }
-    if (this.axesHelper) {
-      this.scene.remove(this.axesHelper);
-      this.axesHelper.geometry.dispose();
-    }
+    this.detachHelpersAndLights(this.activeScene);
+    this.gridHelper.geometry.dispose();
+    this.axesHelper.geometry.dispose();
   }
 }

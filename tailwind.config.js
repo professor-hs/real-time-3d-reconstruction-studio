@@ -8,12 +8,12 @@ export default {
     extend: {
       colors: {
         studio: {
-          bg: "#0B0E13",
-          panel: "#111722",
-          panelHover: "#161E2C",
-          panelLight: "#1A2333",
-          border: "#273244",
-          borderLight: "#334155",
+          bg: "#090D13",
+          panel: "#111821",
+          panelHover: "#16202C",
+          panelLight: "#1A2535",
+          border: "#263445",
+          borderLight: "#33455B",
           accent: "#3B82F6",
           cyan: "#22D3EE",
           text: "#F1F5F9",

@@ -1,44 +1,64 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import * as THREE from 'three';
 import { Header } from './components/Header';
-import { LeftSidebar } from './components/LeftSidebar';
-import { Viewport } from './components/Viewport';
-import { RightInspector } from './components/RightInspector';
+import { LeftSidebarWorld } from './components/LeftSidebarWorld';
+import { LeftSidebarMedical } from './components/LeftSidebarMedical';
+import { Viewport3D } from './components/Viewport3D';
+import { RightInspectorWorld } from './components/RightInspectorWorld';
+import { RightInspectorMedical } from './components/RightInspectorMedical';
 import { BottomStatusBar } from './components/BottomStatusBar';
 import { BenchmarkModal } from './components/BenchmarkModal';
-import { PreviewModal } from './components/PreviewModal';
-import { ReconstructionEngine } from './engine/ReconstructionEngine';
+import { MultiViewModal } from './components/MultiViewModal';
+import { MedicalMprViewer } from './components/MedicalMprViewer';
+
+import { EngineRenderer } from './engine/Renderer';
+import { WorldEngine } from './engine/WorldEngine';
+import { MedicalEngine } from './engine/MedicalEngine';
+import { FeatureMatcher } from './engine/FeatureMatcher';
+import { ModelExporter } from './engine/Exporters';
+import { BenchmarkRunner } from './engine/Benchmark';
+
 import {
   BenchmarkResult,
   GPUStats,
-  MediaMetadata,
-  ReconstructionSettings,
-  ViewportMode,
+  MedicalSettings,
+  MedicalVolumeMetadata,
+  MultiViewResult,
+  StudioModule,
+  WorldMediaMetadata,
+  WorldSettings,
 } from './types';
 import { formatBytes, formatNumber } from './utils/formatters';
 
 export const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<ReconstructionEngine | null>(null);
+  const rendererRef = useRef<EngineRenderer | null>(null);
+  const worldEngineRef = useRef<WorldEngine | null>(null);
+  const medicalEngineRef = useRef<MedicalEngine | null>(null);
 
-  // Application State
+  // Application Module: 'world' or 'medical'
+  const [currentModule, setCurrentModule] = useState<StudioModule>('world');
   const [isWebGL2Supported, setIsWebGL2Supported] = useState(true);
+
+  // Shared GPU Telemetry
   const [stats, setStats] = useState<GPUStats>({
     isWebGL2: true,
-    rendererName: 'Detecting GPU...',
+    rendererName: 'Detecting GPU Hardware...',
     vendorName: 'Detecting Vendor...',
     fps: 60,
     frameTimeMs: 16.6,
-    pointCount: 65536,
     drawCalls: 1,
-    geometriesCount: 1,
+    verticesCount: 65536,
+    trianglesCount: 130050,
+    pointCount: 0,
     texturesCount: 2,
-    estimatedBufferBytes: 65536 * 20,
-    hasTimerQuery: false,
+    estimatedVramBytes: 65536 * 24,
     glVersion: 'WebGL 2.0',
     shadingLanguageVersion: 'GLSL ES 3.00',
   });
 
-  const [metadata, setMetadata] = useState<MediaMetadata>({
+  // World Module State
+  const [worldMetadata, setWorldMetadata] = useState<WorldMediaMetadata>({
     name: 'Synthetic Alpine Laboratory Scene',
     width: 1024,
     height: 768,
@@ -47,7 +67,8 @@ export const App: React.FC = () => {
     type: 'sample',
   });
 
-  const [settings, setSettings] = useState<ReconstructionSettings>({
+  const [worldSettings, setWorldSettings] = useState<WorldSettings>({
+    renderMode: 'solid',
     depthMethod: 'luminance',
     resolution: 256,
     depthIntensity: 1.2,
@@ -55,87 +76,116 @@ export const App: React.FC = () => {
     contrast: 1.1,
     brightness: 1.0,
     edgeInfluence: 1.4,
+    smoothness: 1.0,
     colorMode: 'rgb',
     invertDepth: false,
-    wireframe: false,
     showGrid: true,
     showAxes: true,
     autoRotate: false,
-    animatePoints: false,
-    backgroundColor: '#0B0E13',
+    roughness: 0.4,
+    metalness: 0.1,
+    backgroundColor: '#090D13',
   });
 
-  const [viewportMode, setViewportMode] = useState<ViewportMode>('pointcloud');
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [depthThumbnailUrl, setDepthThumbnailUrl] = useState<string | null>(null);
-  const [importedDepthUrl, setImportedDepthUrl] = useState<string | null>(null);
+  const [worldThumbnail, setWorldThumbnail] = useState<string | null>(null);
+
+  // Multi-View State
+  const [multiViewResult, setMultiViewResult] = useState<MultiViewResult | null>(null);
+  const [multiViewImgs, setMultiViewImgs] = useState<{ img1: HTMLImageElement | null; img2: HTMLImageElement | null }>({
+    img1: null,
+    img2: null,
+  });
+  const [isMultiViewModalOpen, setIsMultiViewModalOpen] = useState(false);
+
+  // Medical Module State
+  const [medicalMetadata, setMedicalMetadata] = useState<MedicalVolumeMetadata>({
+    seriesDescription: 'Synthetic Calibrated Neuro Head CT Phantom',
+    modality: 'CT',
+    dimensions: [128, 128, 64],
+    voxelSpacing: [1.2, 1.2, 2.5],
+    windowCenter: 40,
+    windowWidth: 350,
+    minHU: -1000,
+    maxHU: 1500,
+    sliceCount: 64,
+    patientId: 'SYNTH-PHANTOM-001',
+    isSynthetic: true,
+  });
+
+  const [medicalSettings, setMedicalSettings] = useState<MedicalSettings>({
+    renderMode: 'dvr',
+    windowCenter: 40,
+    windowWidth: 350,
+    opacity: 1.2,
+    stepSize: 0.003,
+    brightness: 1.2,
+    isosurfaceThreshold: 250,
+    surfaceColor: '#E2E8F0',
+    surfaceOpacity: 1.0,
+    showBoundingBox: true,
+    showSlicesIn3D: false,
+    activeSlice: {
+      axial: 32,
+      coronal: 64,
+      sagittal: 64,
+    },
+  });
+
+  const [showMprViewer, setShowMprViewer] = useState(false);
+
+  // Modals & Status
+  const [isBenchmarkOpen, setIsBenchmarkOpen] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
 
-  // Modals state
-  const [isBenchmarkOpen, setIsBenchmarkOpen] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-
-  // Refresh thumbnail previews from engine
-  const refreshPreviews = useCallback(() => {
-    if (!engineRef.current) return;
-
-    // RGB source thumbnail
-    const srcCanvas = engineRef.current.getActiveSourceCanvas();
-    if (srcCanvas) {
-      if (srcCanvas instanceof HTMLCanvasElement) {
-        setThumbnailUrl(srcCanvas.toDataURL('image/jpeg', 0.8));
-      } else if (srcCanvas instanceof HTMLImageElement) {
-        setThumbnailUrl(srcCanvas.src);
-      }
-    }
-
-    // Depth thumbnail
-    const depthCanvas = engineRef.current.getDepthPreviewCanvas();
-    if (depthCanvas) {
-      setDepthThumbnailUrl(depthCanvas.toDataURL('image/jpeg', 0.8));
-    }
-
-    // Imported depth thumbnail
-    const importedCanvas = engineRef.current.getActiveDepthCanvas();
-    if (importedCanvas) {
-      if (importedCanvas instanceof HTMLCanvasElement) {
-        setImportedDepthUrl(importedCanvas.toDataURL('image/jpeg', 0.8));
-      } else if (importedCanvas instanceof HTMLImageElement) {
-        setImportedDepthUrl(importedCanvas.src);
-      }
-    } else {
-      setImportedDepthUrl(null);
+  // Helper to refresh world thumbnail
+  const refreshWorldThumbnail = useCallback(() => {
+    if (!worldEngineRef.current) return;
+    const canvas = worldEngineRef.current.getActiveSourceCanvas();
+    if (canvas instanceof HTMLCanvasElement) {
+      setWorldThumbnail(canvas.toDataURL('image/jpeg', 0.8));
+    } else if (canvas instanceof HTMLImageElement) {
+      setWorldThumbnail(canvas.src);
     }
   }, []);
 
-  // Initialize engine on mount
+  // Initialize Engines on mount
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const engine = new ReconstructionEngine(
-      (newMeta) => {
-        setMetadata(newMeta);
-      },
+    const worldEngine = new WorldEngine((newMeta) => {
+      setWorldMetadata(newMeta);
+    });
+    worldEngineRef.current = worldEngine;
+
+    const medicalEngine = new MedicalEngine();
+    medicalEngine.buildVolumeMesh();
+    medicalEngineRef.current = medicalEngine;
+    setMedicalMetadata(medicalEngine.metadata);
+    setMedicalSettings(medicalEngine.settings);
+
+    // Initial scene is World
+    const renderer = new EngineRenderer(
+      canvasRef.current,
+      worldEngine.scene,
       (newStats) => {
         setStats(newStats);
       }
     );
 
-    const initialized = engine.init(canvasRef.current);
-    if (!initialized) {
+    if (!renderer.getWebGL2Supported()) {
       setIsWebGL2Supported(false);
-      setStats((prev) => ({ ...prev, isWebGL2: false }));
     }
 
-    engineRef.current = engine;
-    refreshPreviews();
+    rendererRef.current = renderer;
+    renderer.start();
+    refreshWorldThumbnail();
 
-    // Resize observer for responsive viewport
+    // Resize observer
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
-          engine.renderer?.resize(width, height);
+          renderer.resize(width, height);
         }
       }
     });
@@ -146,178 +196,350 @@ export const App: React.FC = () => {
 
     return () => {
       resizeObserver.disconnect();
-      engine.dispose();
-      engineRef.current = null;
+      renderer.dispose();
+      worldEngine.dispose();
+      medicalEngine.dispose();
     };
-  }, [refreshPreviews]);
+  }, [refreshWorldThumbnail]);
 
-  // Update engine settings when settings state change
-  const handleUpdateSettings = (newSettings: Partial<ReconstructionSettings>) => {
-    setSettings((prev) => {
-      const updated = { ...prev, ...newSettings };
-      engineRef.current?.updateSettings(updated);
-      return updated;
-    });
+  // Handle Module Switching without reloading WebGL context
+  const handleSelectModule = (mod: StudioModule) => {
+    setCurrentModule(mod);
+    if (!rendererRef.current) return;
 
-    // If depth-affecting parameters changed, update depth preview
-    if (
-      newSettings.depthMethod !== undefined ||
-      newSettings.contrast !== undefined ||
-      newSettings.brightness !== undefined ||
-      newSettings.edgeInfluence !== undefined ||
-      newSettings.invertDepth !== undefined
-    ) {
-      setTimeout(refreshPreviews, 50);
+    if (mod === 'world' && worldEngineRef.current) {
+      rendererRef.current.switchScene(worldEngineRef.current.scene, 2.8);
+      refreshWorldThumbnail();
+    } else if (mod === 'medical' && medicalEngineRef.current) {
+      rendererRef.current.switchScene(medicalEngineRef.current.scene, 2.2);
     }
   };
 
-  const handleSetViewportMode = (mode: ViewportMode) => {
-    setViewportMode(mode);
-    engineRef.current?.setViewportMode(mode);
-  };
-
-  const handleResetScene = () => {
-    engineRef.current?.resetCamera();
-    handleUpdateSettings({
-      depthIntensity: 1.2,
-      pointSize: 3.5,
-      contrast: 1.1,
-      brightness: 1.0,
-      edgeInfluence: 1.4,
-      autoRotate: false,
-      animatePoints: false,
-      wireframe: false,
-      showGrid: true,
-      showAxes: true,
-      colorMode: 'rgb',
+  // World Settings Handlers
+  const handleUpdateWorldSettings = (newSettings: Partial<WorldSettings>) => {
+    setWorldSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      worldEngineRef.current?.updateSettings(updated);
+      return updated;
     });
   };
 
-  const handleLoadSampleScene = () => {
-    engineRef.current?.loadSampleScene();
-    refreshPreviews();
+  const handleLoadWorldSample = () => {
+    worldEngineRef.current?.loadSampleScene();
+    if (worldEngineRef.current) {
+      setWorldMetadata(worldEngineRef.current.metadata);
+    }
+    refreshWorldThumbnail();
   };
 
-  const handleUploadImage = async (file: File) => {
+  const handleUploadWorldImage = async (file: File) => {
     try {
-      await engineRef.current?.loadImage(file);
-      refreshPreviews();
+      await worldEngineRef.current?.loadImage(file);
+      if (worldEngineRef.current) setWorldMetadata(worldEngineRef.current.metadata);
+      refreshWorldThumbnail();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to load image.');
     }
   };
 
-  const handleUploadVideo = async (file: File) => {
+  const handleUploadWorldMultiImages = async (files: FileList) => {
+    if (files.length < 2) {
+      alert('Multi-view photogrammetry requires at least 2 distinct viewpoint images.');
+      return;
+    }
+
     try {
-      await engineRef.current?.loadVideo(file);
-      refreshPreviews();
+      // Decode first image for primary texture
+      await worldEngineRef.current?.loadImage(files[0]);
+      if (worldEngineRef.current) {
+        worldEngineRef.current.metadata.type = 'multi-image';
+        worldEngineRef.current.metadata.imageCount = files.length;
+        setWorldMetadata({ ...worldEngineRef.current.metadata });
+      }
+      refreshWorldThumbnail();
+
+      // Decode first two images for feature matching
+      const img1 = new Image();
+      const img2 = new Image();
+      const url1 = URL.createObjectURL(files[0]);
+      const url2 = URL.createObjectURL(files[1]);
+
+      await Promise.all([
+        new Promise((resolve) => {
+          img1.onload = resolve;
+          img1.src = url1;
+        }),
+        new Promise((resolve) => {
+          img2.onload = resolve;
+          img2.src = url2;
+        }),
+      ]);
+
+      const matchRes = FeatureMatcher.matchImagePair(img1, img2, files[0].name, files[1].name);
+      setMultiViewResult(matchRes);
+      setMultiViewImgs({ img1, img2 });
+      setIsMultiViewModalOpen(true);
+    } catch (err) {
+      alert('Error processing multi-view images.');
+    }
+  };
+
+  const handleUploadWorldVideo = async (file: File) => {
+    try {
+      await worldEngineRef.current?.loadVideo(file);
+      if (worldEngineRef.current) setWorldMetadata(worldEngineRef.current.metadata);
+      refreshWorldThumbnail();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to load video.');
     }
   };
 
-  const handleUploadDepthMap = async (file: File) => {
+  const handleUploadWorldDepth = async (file: File) => {
     try {
-      await engineRef.current?.loadDepthMap(file);
-      setSettings((prev) => ({ ...prev, depthMethod: 'imported' }));
-      refreshPreviews();
+      await worldEngineRef.current?.loadDepthMap(file);
+      setWorldSettings((prev) => ({ ...prev, depthMethod: 'imported' }));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to load depth map.');
     }
   };
 
-  const handleClearDepthMap = () => {
-    engineRef.current?.clearDepthMap();
-    setSettings((prev) => ({ ...prev, depthMethod: 'luminance' }));
-    refreshPreviews();
+  const handleClearWorldDepth = () => {
+    worldEngineRef.current?.clearDepthMap();
+    setWorldSettings((prev) => ({ ...prev, depthMethod: 'luminance' }));
   };
 
-  // Video playback handlers
-  const handlePlayVideo = () => engineRef.current?.videoProcessor.play();
-  const handlePauseVideo = () => engineRef.current?.videoProcessor.pause();
-  const handleRestartVideo = () => engineRef.current?.videoProcessor.restart();
-  const handleSeekVideo = (time: number) => engineRef.current?.videoProcessor.seek(time);
+  // Medical Settings Handlers
+  const handleUpdateMedicalSettings = (newSettings: Partial<MedicalSettings>) => {
+    setMedicalSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      medicalEngineRef.current?.updateSettings(updated);
+      return updated;
+    });
+  };
 
-  // Export PLY
-  const handleExportPly = async () => {
-    if (!engineRef.current) return;
-    try {
-      setExportStatus('Generating PLY...');
-      const res = await engineRef.current.exportPly();
-      setExportStatus(`Exported ${formatNumber(res.pointCount)} pts (${formatBytes(res.fileSizeBytes)})`);
-      setTimeout(() => setExportStatus(null), 8000);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'PLY export failed.');
-      setExportStatus(null);
+  const handleLoadMedicalPhantom = () => {
+    medicalEngineRef.current?.loadSyntheticPhantom();
+    if (medicalEngineRef.current) {
+      setMedicalMetadata(medicalEngineRef.current.metadata);
+      setMedicalSettings(medicalEngineRef.current.settings);
     }
+  };
+
+  const handleImportDicom = async (files: FileList) => {
+    try {
+      const buffers: ArrayBuffer[] = [];
+      for (let i = 0; i < files.length; i++) {
+        buffers.push(await files[i].arrayBuffer());
+      }
+      await medicalEngineRef.current?.loadDicomFiles(buffers);
+      if (medicalEngineRef.current) {
+        setMedicalMetadata(medicalEngineRef.current.metadata);
+        setMedicalSettings(medicalEngineRef.current.settings);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to parse DICOM series.');
+    }
+  };
+
+  const handleImportNifti = async (file: File) => {
+    try {
+      const buf = await file.arrayBuffer();
+      await medicalEngineRef.current?.loadNiftiFile(buf, file.name);
+      if (medicalEngineRef.current) {
+        setMedicalMetadata(medicalEngineRef.current.metadata);
+        setMedicalSettings(medicalEngineRef.current.settings);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to parse NIfTI volume.');
+    }
+  };
+
+  // Camera & Background
+  const handleResetView = () => {
+    rendererRef.current?.resetCamera(currentModule === 'world' ? 2.8 : 2.2);
+  };
+
+  const handleChangeBackgroundColor = (color: string) => {
+    if (rendererRef.current?.activeScene) {
+      rendererRef.current.activeScene.background = new THREE.Color(color);
+    }
+    handleUpdateWorldSettings({ backgroundColor: color });
+  };
+
+  // Exporters
+  const handleExportWorldPLY = (includeFaces: boolean) => {
+    if (!worldEngineRef.current) return;
+    const src = worldEngineRef.current.getActiveSourceCanvas();
+    if (!src) return;
+    setExportStatus('Exporting PLY...');
+    const res = ModelExporter.exportWorldPLY(
+      src,
+      worldEngineRef.current.getActiveDepthCanvas(),
+      worldSettings,
+      worldMetadata.aspectRatio,
+      includeFaces
+    );
+    setExportStatus(`Exported ${formatNumber(res.count)} ${includeFaces ? 'faces' : 'pts'} (${formatBytes(res.sizeBytes)})`);
+    setTimeout(() => setExportStatus(null), 8000);
+  };
+
+  const handleExportWorldOBJ = () => {
+    if (!worldEngineRef.current) return;
+    const src = worldEngineRef.current.getActiveSourceCanvas();
+    if (!src) return;
+    setExportStatus('Exporting OBJ...');
+    const res = ModelExporter.exportWorldOBJ(
+      src,
+      worldEngineRef.current.getActiveDepthCanvas(),
+      worldSettings,
+      worldMetadata.aspectRatio
+    );
+    setExportStatus(`Exported OBJ ${formatNumber(res.vertexCount)} vertices (${formatBytes(res.sizeBytes)})`);
+    setTimeout(() => setExportStatus(null), 8000);
+  };
+
+  const handleExportMedicalSTL = () => {
+    if (!medicalEngineRef.current) return;
+    setExportStatus('Exporting Medical STL...');
+    const obj = medicalEngineRef.current.surfaceMesh || medicalEngineRef.current.volumeMesh;
+    if (!obj) return;
+    const res = ModelExporter.exportMedicalSTL(obj);
+    setExportStatus(`Exported 3D Print STL (${formatBytes(res.sizeBytes)})`);
+    setTimeout(() => setExportStatus(null), 8000);
+  };
+
+  const handleExportMedicalPLY = () => {
+    if (!medicalEngineRef.current) return;
+    setExportStatus('Exporting Medical PLY...');
+    const obj = medicalEngineRef.current.surfaceMesh || medicalEngineRef.current.volumeMesh;
+    if (!obj) return;
+    const res = ModelExporter.exportMedicalPLY(obj);
+    setExportStatus(`Exported Medical PLY (${formatBytes(res.sizeBytes)})`);
+    setTimeout(() => setExportStatus(null), 8000);
+  };
+
+  const handleExportMedicalOBJ = () => {
+    if (!medicalEngineRef.current) return;
+    setExportStatus('Exporting Medical OBJ...');
+    const obj = medicalEngineRef.current.surfaceMesh || medicalEngineRef.current.volumeMesh;
+    if (!obj) return;
+    const res = ModelExporter.exportMedicalOBJ(obj);
+    setExportStatus(`Exported Medical OBJ (${formatBytes(res.sizeBytes)})`);
+    setTimeout(() => setExportStatus(null), 8000);
   };
 
   // Benchmark Runner
   const handleRunBenchmark = async (): Promise<BenchmarkResult> => {
-    if (!engineRef.current) throw new Error('Engine not initialized');
-    return await engineRef.current.runBenchmark();
+    if (!rendererRef.current || !rendererRef.current.renderer || !worldEngineRef.current) {
+      throw new Error('Renderer not ready.');
+    }
+    const src = worldEngineRef.current.getActiveSourceCanvas();
+    if (!src) throw new Error('No source available.');
+
+    return await BenchmarkRunner.runFullBenchmark(
+      src,
+      rendererRef.current.renderer,
+      rendererRef.current.activeScene,
+      rendererRef.current.camera,
+      worldSettings.resolution
+    );
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0B0E13] text-slate-100 overflow-hidden font-sans">
-      {/* 1. Header */}
+    <div className="flex flex-col h-screen w-screen bg-[#090D13] text-slate-100 overflow-hidden font-sans">
+      {/* 1. Header with Module Switcher */}
       <Header
+        currentModule={currentModule}
+        onSelectModule={handleSelectModule}
         stats={stats}
-        onResetScene={handleResetScene}
-        onOpenExport={handleExportPly}
+        onResetView={handleResetView}
         onOpenBenchmark={() => setIsBenchmarkOpen(true)}
-        onOpenPreview={() => setIsPreviewOpen(true)}
+        onExportWorldPLY={handleExportWorldPLY}
+        onExportWorldOBJ={handleExportWorldOBJ}
+        onExportMedicalSTL={handleExportMedicalSTL}
+        onExportMedicalPLY={handleExportMedicalPLY}
+        onExportMedicalOBJ={handleExportMedicalOBJ}
       />
 
-      {/* 2. Main Work Area (Left Sidebar + Center Viewport + Right Inspector) */}
+      {/* 2. Main Work Area */}
       <main className="flex-1 flex flex-row overflow-hidden relative">
-        {/* Left Sidebar */}
-        <LeftSidebar
-          metadata={metadata}
-          settings={settings}
-          onUpdateSettings={handleUpdateSettings}
-          onLoadSampleScene={handleLoadSampleScene}
-          onUploadImage={handleUploadImage}
-          onUploadVideo={handleUploadVideo}
-          onUploadDepthMap={handleUploadDepthMap}
-          onClearDepthMap={handleClearDepthMap}
-          hasImportedDepthMap={!!importedDepthUrl}
-          onPlayVideo={handlePlayVideo}
-          onPauseVideo={handlePauseVideo}
-          onRestartVideo={handleRestartVideo}
-          onSeekVideo={handleSeekVideo}
-          thumbnailUrl={thumbnailUrl}
-          depthThumbnailUrl={depthThumbnailUrl}
-        />
-
-        {/* Center 3D Three.js Viewport */}
-        <Viewport
-          canvasRef={canvasRef}
-          viewportMode={viewportMode}
-          onSetViewportMode={handleSetViewportMode}
-          onResetCamera={handleResetScene}
-          settings={settings}
-          onUpdateSettings={handleUpdateSettings}
-          isWebGL2Supported={isWebGL2Supported}
-          thumbnailUrl={thumbnailUrl}
-          depthThumbnailUrl={depthThumbnailUrl}
-        />
-
-        {/* Right Scene Inspector */}
-        <div className="hidden lg:block">
-          <RightInspector
-            stats={stats}
-            metadata={metadata}
-            settings={settings}
+        {/* Dynamic Left Sidebar based on selected module */}
+        {currentModule === 'world' ? (
+          <LeftSidebarWorld
+            metadata={worldMetadata}
+            settings={worldSettings}
+            onUpdateSettings={handleUpdateWorldSettings}
+            onLoadSampleScene={handleLoadWorldSample}
+            onUploadImage={handleUploadWorldImage}
+            onUploadMultiImages={handleUploadWorldMultiImages}
+            onUploadVideo={handleUploadWorldVideo}
+            onUploadDepthMap={handleUploadWorldDepth}
+            onClearDepthMap={handleClearWorldDepth}
+            hasImportedDepthMap={worldSettings.depthMethod === 'imported'}
+            onPlayVideo={() => worldEngineRef.current?.videoProcessor.play()}
+            onPauseVideo={() => worldEngineRef.current?.videoProcessor.pause()}
+            onRestartVideo={() => worldEngineRef.current?.videoProcessor.restart()}
+            onSeekVideo={(t) => worldEngineRef.current?.videoProcessor.seek(t)}
+            onOpenMultiViewModal={() => setIsMultiViewModalOpen(true)}
+            thumbnailUrl={worldThumbnail}
           />
+        ) : (
+          <LeftSidebarMedical
+            metadata={medicalMetadata}
+            settings={medicalSettings}
+            onUpdateSettings={handleUpdateMedicalSettings}
+            onLoadSyntheticPhantom={handleLoadMedicalPhantom}
+            onImportDicomFiles={handleImportDicom}
+            onImportNiftiFile={handleImportNifti}
+            onToggleMprViewer={() => setShowMprViewer(!showMprViewer)}
+            showMprViewer={showMprViewer}
+          />
+        )}
+
+        {/* Central 3D Viewport */}
+        <Viewport3D
+          canvasRef={canvasRef}
+          currentModule={currentModule}
+          onResetCamera={handleResetView}
+          isWebGL2Supported={isWebGL2Supported}
+          backgroundColor={worldSettings.backgroundColor}
+          onChangeBackgroundColor={handleChangeBackgroundColor}
+          onToggleMprViewer={currentModule === 'medical' ? () => setShowMprViewer(!showMprViewer) : undefined}
+          showMprViewer={showMprViewer}
+        />
+
+        {/* 2D Orthogonal MPR Viewer Overlay in Medical Mode */}
+        {currentModule === 'medical' && showMprViewer && (
+          <MedicalMprViewer
+            medicalEngine={medicalEngineRef.current}
+            settings={medicalSettings}
+            onUpdateSettings={handleUpdateMedicalSettings}
+            onClose={() => setShowMprViewer(false)}
+          />
+        )}
+
+        {/* Dynamic Right Inspector based on selected module */}
+        <div className="hidden lg:block">
+          {currentModule === 'world' ? (
+            <RightInspectorWorld
+              stats={stats}
+              metadata={worldMetadata}
+              settings={worldSettings}
+            />
+          ) : (
+            <RightInspectorMedical
+              stats={stats}
+              metadata={medicalMetadata}
+              settings={medicalSettings}
+            />
+          )}
         </div>
       </main>
 
       {/* 3. Bottom Status Bar */}
       <BottomStatusBar
+        currentModule={currentModule}
         stats={stats}
-        metadata={metadata}
-        settings={settings}
         exportStatus={exportStatus}
       />
 
@@ -326,17 +548,16 @@ export const App: React.FC = () => {
         isOpen={isBenchmarkOpen}
         onClose={() => setIsBenchmarkOpen(false)}
         onRunBenchmark={handleRunBenchmark}
-        currentResolution={settings.resolution}
+        currentResolution={worldSettings.resolution}
       />
 
-      {/* 2D Preview Modal */}
-      <PreviewModal
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        thumbnailUrl={thumbnailUrl}
-        depthThumbnailUrl={depthThumbnailUrl}
-        importedDepthUrl={importedDepthUrl}
-        depthMethod={settings.depthMethod}
+      {/* Multi-View Feature Matching Modal */}
+      <MultiViewModal
+        isOpen={isMultiViewModalOpen}
+        onClose={() => setIsMultiViewModalOpen(false)}
+        result={multiViewResult}
+        img1Element={multiViewImgs.img1}
+        img2Element={multiViewImgs.img2}
       />
     </div>
   );
