@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0B0E13;
+  color: #F1F5F9;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Custom dark graphite scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0E13;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #273244;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3B82F6;
+}
+
+/* Custom range sliders styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  background: #1E293B;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3B82F6;
+  cursor: pointer;
+  border: 2px solid #0B0E13;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.5);
+  transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: #22D3EE;
+}
