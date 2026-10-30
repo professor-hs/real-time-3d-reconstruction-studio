@@ -30,6 +30,7 @@ interface LeftSidebarWorldProps {
   settings: WorldSettings;
   onUpdateSettings: (newSettings: Partial<WorldSettings>) => void;
   onLoadSampleScene: () => void;
+  onLoadSamplePreset: (presetId: 'alpine' | 'relief' | 'temple_pair' | 'alpine_depth') => void;
   onUploadImage: (file: File) => void;
   onUploadMultiImages: (files: FileList) => void;
   onUploadVideo: (file: File) => void;
@@ -49,6 +50,7 @@ export const LeftSidebarWorld: React.FC<LeftSidebarWorldProps> = ({
   settings,
   onUpdateSettings,
   onLoadSampleScene,
+  onLoadSamplePreset,
   onUploadImage,
   onUploadMultiImages,
   onUploadVideo,
@@ -147,6 +149,75 @@ export const LeftSidebarWorld: React.FC<LeftSidebarWorldProps> = ({
                 <div className="text-[9px] text-studio-dim">MP4, WEBM</div>
               </div>
             </button>
+          </div>
+
+          {/* Preset Benchmark Datasets */}
+          <div className="pt-2 border-t border-studio-border/60">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+              <span>Preset Sample Datasets</span>
+              <span className="text-[9px] text-cyan-400 font-mono">1-CLICK LOAD</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => onLoadSamplePreset('alpine')}
+                className="p-1.5 rounded bg-studio-bg border border-studio-border hover:border-studio-accent hover:bg-studio-panelHover text-left flex items-center space-x-2 transition-all group"
+                title="Load high-resolution alpine mountain landscape"
+              >
+                <div className="w-6 h-6 rounded bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
+                  <img src="/samples/alpine_landscape.png" alt="Alpine" className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-medium text-slate-200 group-hover:text-blue-400 truncate">Alpine Mountain</div>
+                  <div className="text-[8px] text-studio-dim">1024×768 RGB</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onLoadSamplePreset('alpine_depth')}
+                className="p-1.5 rounded bg-studio-bg border border-studio-border hover:border-cyan-500 hover:bg-studio-panelHover text-left flex items-center space-x-2 transition-all group"
+                title="Load alpine photo with ground-truth depth map"
+              >
+                <div className="w-6 h-6 rounded bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
+                  <img src="/samples/alpine_depth_map.png" alt="Depth" className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-medium text-slate-200 group-hover:text-cyan-400 truncate">Alpine + Depth</div>
+                  <div className="text-[8px] text-studio-dim">Ground-Truth</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onLoadSamplePreset('relief')}
+                className="p-1.5 rounded bg-studio-bg border border-studio-border hover:border-amber-500 hover:bg-studio-panelHover text-left flex items-center space-x-2 transition-all group"
+                title="Load high-contrast geometric 3D relief sculpture"
+              >
+                <div className="w-6 h-6 rounded bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
+                  <img src="/samples/relief_sculpture.png" alt="Relief" className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-medium text-slate-200 group-hover:text-amber-400 truncate">3D Relief</div>
+                  <div className="text-[8px] text-studio-dim">Stepped Mesh</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onLoadSamplePreset('temple_pair')}
+                className="p-1.5 rounded bg-studio-bg border border-studio-border hover:border-emerald-500 hover:bg-studio-panelHover text-left flex items-center space-x-2 transition-all group"
+                title="Load temple stereo pair for multi-view feature correspondence"
+              >
+                <div className="w-6 h-6 rounded bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
+                  <img src="/samples/temple_view_left.png" alt="Temple" className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-medium text-slate-200 group-hover:text-emerald-400 truncate">Temple Stereo</div>
+                  <div className="text-[8px] text-studio-dim">Multi-View (2)</div>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Hidden File Inputs */}

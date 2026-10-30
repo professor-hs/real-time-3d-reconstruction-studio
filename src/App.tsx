@@ -232,6 +232,56 @@ export const App: React.FC = () => {
     refreshWorldThumbnail();
   };
 
+  const handleLoadSamplePreset = async (presetId: 'alpine' | 'relief' | 'temple_pair' | 'alpine_depth') => {
+    if (!worldEngineRef.current) return;
+    try {
+      if (presetId === 'alpine') {
+        await worldEngineRef.current.loadFromUrl('/samples/alpine_landscape.png', 'alpine_landscape.png');
+        setWorldMetadata(worldEngineRef.current.metadata);
+        refreshWorldThumbnail();
+      } else if (presetId === 'alpine_depth') {
+        await worldEngineRef.current.loadFromUrl('/samples/alpine_landscape.png', 'alpine_landscape.png');
+        await worldEngineRef.current.loadFromUrl('/samples/alpine_depth_map.png', 'alpine_depth_map.png', true);
+        setWorldSettings((prev) => ({ ...prev, depthMethod: 'imported' }));
+        setWorldMetadata(worldEngineRef.current.metadata);
+        refreshWorldThumbnail();
+      } else if (presetId === 'relief') {
+        await worldEngineRef.current.loadFromUrl('/samples/relief_sculpture.png', 'relief_sculpture.png');
+        setWorldMetadata(worldEngineRef.current.metadata);
+        refreshWorldThumbnail();
+      } else if (presetId === 'temple_pair') {
+        await worldEngineRef.current.loadFromUrl('/samples/temple_view_left.png', 'temple_view_left.png');
+        if (worldEngineRef.current) {
+          worldEngineRef.current.metadata.type = 'multi-image';
+          worldEngineRef.current.metadata.imageCount = 2;
+          setWorldMetadata({ ...worldEngineRef.current.metadata });
+        }
+        refreshWorldThumbnail();
+
+        // Perform feature match on the stereo pair
+        const img1 = new Image();
+        const img2 = new Image();
+        await Promise.all([
+          new Promise((res) => {
+            img1.onload = res;
+            img1.src = '/samples/temple_view_left.png';
+          }),
+          new Promise((res) => {
+            img2.onload = res;
+            img2.src = '/samples/temple_view_right.png';
+          }),
+        ]);
+        const matchRes = FeatureMatcher.matchImagePair(img1, img2, 'temple_view_left.png', 'temple_view_right.png');
+        setMultiViewResult(matchRes);
+        setMultiViewImgs({ img1, img2 });
+        setIsMultiViewModalOpen(true);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to load sample preset.');
+    }
+  };
+
   const handleUploadWorldImage = async (file: File) => {
     try {
       await worldEngineRef.current?.loadImage(file);
@@ -470,6 +520,7 @@ export const App: React.FC = () => {
             settings={worldSettings}
             onUpdateSettings={handleUpdateWorldSettings}
             onLoadSampleScene={handleLoadWorldSample}
+            onLoadSamplePreset={handleLoadSamplePreset}
             onUploadImage={handleUploadWorldImage}
             onUploadMultiImages={handleUploadWorldMultiImages}
             onUploadVideo={handleUploadWorldVideo}

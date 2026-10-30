@@ -382,6 +382,39 @@ export class WorldEngine {
     this.updateSettings({ depthMethod: 'imported' });
   }
 
+  public async loadFromUrl(url: string, name: string, isDepth = false): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const texture = new THREE.Texture(img);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        if (isDepth) {
+          this.currentDepthElement = img;
+          this.depthTexture = texture;
+          this.settings.depthMethod = 'imported';
+          this.updateSettings({ depthMethod: 'imported' });
+        } else {
+          this.videoProcessor.dispose();
+          this.currentImageElement = img;
+          this.imageTexture = texture;
+          this.metadata = {
+            name,
+            width: img.naturalWidth || 800,
+            height: img.naturalHeight || 600,
+            aspectRatio: (img.naturalWidth || 800) / (img.naturalHeight || 600),
+            fileSize: 25000,
+            type: 'image',
+          };
+          this.rebuildWorld();
+        }
+        resolve();
+      };
+      img.onerror = () => reject(new Error(`Failed to load asset from ${url}`));
+      img.src = url;
+    });
+  }
+
   public clearDepthMap() {
     this.currentDepthElement = null;
     this.depthTexture = null;
