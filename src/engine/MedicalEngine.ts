@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
 import { volumeRaycastVertexShader, volumeRaycastFragmentShader } from '../shaders/volumeRaycastShaders';
-import { MedicalSettings, MedicalVolumeData, MedicalVolumeMetadata } from '../types';
+import { MedicalRenderMode, MedicalSettings, MedicalVolumeData, MedicalVolumeMetadata } from '../types';
 import { createSyntheticBrainPhantom } from './SyntheticBrainPhantom';
 import { DicomParser } from './DicomParser';
 import { NiftiParser } from './NiftiParser';
@@ -118,7 +118,7 @@ export class MedicalEngine {
 
     const geometry = new THREE.BoxGeometry(scaleX, scaleY, scaleZ);
 
-    const modeMap = { dvr: 0, mip: 1, minip: 2, avgip: 3, isosurface: 0 };
+    const modeMap: Record<MedicalRenderMode, number> = { dvr: 0, mip: 1, minip: 2, avgip: 3, isosurface: 0 };
 
     const min = this.volumeData.minVal;
     const range = Math.max(this.volumeData.maxVal - min, 1.0);
@@ -167,7 +167,7 @@ export class MedicalEngine {
 
     if (!this.volumeMaterial) return;
 
-    const modeMap = { dvr: 0, mip: 1, minip: 2, avgip: 3, isosurface: 0 };
+    const modeMap: Record<MedicalRenderMode, number> = { dvr: 0, mip: 1, minip: 2, avgip: 3, isosurface: 0 };
     const min = this.volumeData.minVal;
     const range = Math.max(this.volumeData.maxVal - min, 1.0);
     const normWc = (this.settings.windowCenter - min) / range;

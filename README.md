@@ -1,8 +1,9 @@
-# NEUROVISION 3D
-## GPU-Powered World Reconstruction & Medical Image Visualization Studio
+# GPU RECONSTRUCTION & PHOTO ENHANCEMENT STUDIO
+## High-Performance Browser-Based GPU Computing, Video Processing & 3D Reconstruction Platform
 
 [![WebGL 2.0](https://img.shields.io/badge/WebGL-2.0-blue.svg)](https://www.khronos.org/registry/webgl/specs/latest/2.0/)
 [![GLSL 3.00 ES](https://img.shields.io/badge/GLSL-3.00%20ES-cyan.svg)](https://www.khronos.org/registry/OpenGL/specs/es/3.0/GLSL_ES_Specification_3.00.pdf)
+[![WebCodecs MP4 Muxer](https://img.shields.io/badge/MP4-Muxer%20WebCodecs-emerald.svg)](https://w3c.github.io/webcodecs/)
 [![Three.js](https://img.shields.io/badge/Three.js-r165-black.svg)](https://threejs.org/)
 [![Vite + React](https://img.shields.io/badge/Vite-React%2018%20%2B%20TypeScript-61DAFB.svg)](https://vitejs.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -11,179 +12,99 @@
 
 ## 1. Project Overview
 
-**NeuroVision 3D** is an academic GPU computing and computational visualization platform that unifies two distinct computer graphics domains into a single browser-native workstation:
-1. **Module A — Real-Time 3D World Reconstruction**: Displaces planar surface grids on the GPU in real time from monocular imagery and video streams, and performs multi-view photogrammetric feature correspondence matching.
-2. **Module B — GPU-Based Medical Volume Reconstruction**: Performs volumetric ray-casting on WebGL2 3D textures (`sampler3D`) for clinical CT and MRI datasets, synchronized 3-plane orthogonal multi-planar reconstruction (MPR), and Marching Cubes anatomical iso-surface extraction.
+**GPU Reconstruction & Photo Enhancement Studio** is a complete, browser-native GPU computing platform developed to demonstrate genuine client-side hardware-accelerated image processing, video enhancement, 3D geometric reconstruction, and CPU vs GPU performance evaluation.
 
-All calculations execute client-side on the user's hardware graphics card without transmitting patient data or photographs to external cloud services.
+The application features **four dedicated workspaces**:
 
----
-
-## 2. Problem Statement
-
-Both natural world photogrammetry and volumetric medical visualization require processing millions of spatial samples:
-- **World Reconstruction**: Displacing hundreds of thousands of vertices in JavaScript CPU loops stalls the main event thread, dropping frame rates below acceptable levels.
-- **Medical Volume Rendering**: Ray-marching through a $128 \times 128 \times 64$ to $512 \times 512 \times 256$ 3D voxel grid requires evaluating hundreds of millions of ray-box intersection steps per second.
-- **Privacy & Latency**: Transmitting sensitive medical imaging (DICOM / NIfTI) or private user imagery to cloud inference servers poses major data-privacy risks and introduces multi-second round-trip network delays.
-
-NeuroVision 3D resolves these constraints by delegating 100% of spatial displacement, normal derivation, and volumetric ray-marching to the local GPU hardware via WebGL2 and custom GLSL vertex and fragment shaders.
+1. **3D Reconstruction**: Converts monocular photographs and videos into dynamic 3D displaced surface meshes, point clouds, and wireframes with analytical finite-difference surface normals and multi-view photogrammetric correspondence.
+2. **Photo Enhancement**: GPU-accelerated $2\times$ and $4\times$ bicubic upscaling, bilateral edge-preserving denoising, unsharp mask sharpening, blur reduction, and non-linear color grading with interactive before/after split comparison.
+3. **Video Processing**: Frame-by-frame GPU shader enhancement of MP4 videos, preserving original duration, frame order, and audio tracks via WebCodecs and `mp4-muxer`.
+4. **CPU vs GPU Benchmark**: Fair, synchronized performance benchmarks comparing CPU pixel loops (`ImageData`) against GPU WebGL2 shaders with `gl.finish()` synchronization.
 
 ---
 
-## 3. System Architecture
+## 2. File Upload and Exact-Format Preservation
 
-```
-                               ┌────────────────────────────────────────────────────────┐
-                               │                    NEUROVISION 3D                      │
-                               │           Shared Application & GPU Engine              │
-                               └───────────────────────────┬────────────────────────────┘
-                                                           │
-                        ┌──────────────────────────────────┴──────────────────────────────────┐
-                        │                                                                     │
-                        ▼                                                                     ▼
-           [ MODULE A: WORLD RECONSTRUCTION ]                                   [ MODULE B: MEDICAL VISUALIZATION ]
-     ┌──────────────────────────────────────────────┐                     ┌──────────────────────────────────────────────┐
-     │ • Input: Image / Multi-View / Video / Sample │                     │ • Input: DICOM Series / NIfTI / Synthetic CT │
-     │ • Planar Mesh Geometry Buffer (CPU)          │                     │ • 3D Volumetric Texture Unit: sampler3D      │
-     │ • GLSL Vertex Shader:                        │                     │ • GLSL Volume Ray-Casting Shader:            │
-     │   - Luminance / Contrast / Imported Depth    │                     │   - DVR (Alpha Compositing + Gradient Phong) │
-     │   - Finite-Difference Dynamic Normals        │                     │   - MIP (Maximum Intensity Projection)       │
-     │   - Spatial Z-Displacement                   │                     │   - MinIP (Airway / Cavity Projection)       │
-     │ • Three Render Modes:                        │                     │   - AvgIP (Digitally Reconstructed Radiograph│
-     │   - Solid Mesh (Triangles + Lighting)        │                     │ • Synchronized Orthogonal 2D MPR:            │
-     │   - Dense Point Cloud (Circular Sprites)     │                     │   - Axial (XY), Coronal (XZ), Sagittal (YZ)  │
-     │   - Wireframe (Displaced Edges)              │                     │ • Marching Cubes 3D Anatomical Iso-Surface   │
-     │ • Multi-View Feature Matching (Harris/FAST)  │                     │ • Window / Level Calibration (Hounsfield)    │
-     │ • Export: PLY (Mesh/Points), OBJ (v/vt/vn/f) │                     │ • Export: STL (3D Print), PLY, OBJ           │
-     └──────────────────────────────────────────────┘                     └──────────────────────────────────────────────┘
-                                                           │
-                                                           ▼
-                                         [ WebGL2 Hardware Framebuffer ]
-                                        (60 FPS Interactive OrbitControls)
-```
+The application strictly enforces **same-format export**:
+
+| Uploaded Format | Processed Download Format | MIME Type | Codec / Container |
+|---|---|---|---|
+| **PNG** | **PNG** | `image/png` | Lossless Deflate |
+| **JPG** | **JPG** | `image/jpeg` | Configurable Quality ($50\% - 100\%$) |
+| **JPEG** | **JPEG** | `image/jpeg` | Configurable Quality ($50\% - 100\%$) |
+| **MP4** | **MP4** | `video/mp4` | H.264 / AVC Video + AAC Audio Track |
+
+The system never renames extensions or fakes output formats. Output files preserve image dimensions unless upscaled, maintain video durations, and retain audio fidelity.
 
 ---
 
-## 4. Module A: World Reconstruction Pipeline
+## 3. Four Core Workspaces
 
-### 4.1 True Solid Mesh, Point Cloud, and Wireframe
-Unlike simple particle displays, the engine generates an indexed regular grid of $(N-1)^2 \times 2$ triangles in `THREE.BufferGeometry`:
-- **Solid Mesh**: The vertex shader dynamically derives the surface normal $\mathbf{n} = \text{normalize}(\mathbf{t}_x \times \mathbf{t}_y)$ from finite difference displacements $z(x \pm \Delta x), z(y \pm \Delta y)$. The fragment shader applies Blinn-Phong directional illumination with specular highlights.
-- **Point Cloud**: Renders anti-aliased circular point sprites via `gl_PointCoord` with perspective distance attenuation.
-- **Wireframe**: Displays the true displaced triangle mesh edges without visual artifacts.
+### Workspace 1: Photo Enhancement
+* **GPU Upscaling ($2\times, 4\times$)**: Evaluates a 16-tap Catmull-Rom cubic spline interpolation kernel inside the GLSL fragment shader, rendering to an upscaled canvas buffer.
+* **Bilateral Edge-Preserving Denoising**: Samples spatial Gaussian neighborhood combined with photometric range intensity difference to remove high-frequency noise while keeping edges sharp.
+* **Unsharp Mask Sharpening & Deblur**: Computes 9-tap discrete Laplacian convolution to sharpen textures and compensate for camera blur.
+* **Color & Tone Grading**: Non-linear brightness, contrast, gamma correction, saturation, and white balance (temperature & tint).
+* **Interactive Split Slider**: Real-time draggable divider comparing original unedited image against live GPU-processed output.
 
-### 4.2 Multi-View Photogrammetry & Feature Matching
-- Implements corner feature extraction via the Harris corner response:
-  $$R = \det(M) - k \cdot (\text{trace}(M))^2, \quad M = \sum w(x,y) \begin{bmatrix} I_x^2 & I_x I_y \\ I_x I_y & I_y^2 \end{bmatrix}$$
-- Normalized $9 \times 9$ patch descriptors with Lowe's ratio test ($d_1 / d_2 < 0.82$).
-- Epipolar disparity analysis: validates baseline parallax and triangulates sparse 3D spatial points with camera viewpoint representations.
+### Workspace 2: Video Processing
+* **MP4 Video Ingestion**: Loads and previews MP4 videos with duration, resolution, and playback controls.
+* **Real-Time GPU Playback Shaders**: Applies sharpening, denoising, brightness, contrast, and color balance to live video frames at 60 FPS.
+* **WebCodecs + MP4 Muxer Pipeline**:
+  1. Decodes frames at native timestamps.
+  2. Passes each frame through WebGL2 fragment shaders.
+  3. Encodes frames using hardware-accelerated `VideoEncoder` (H.264 baseline/main profile).
+  4. Decodes and encodes audio track using Web Audio API and `AudioEncoder` (AAC-LC).
+  5. Muxes video and audio chunks into a standard, fully playable `.mp4` container.
 
----
+### Workspace 3: 3D Reconstruction
+* **Monocular 2.5D Displacement**: Generates elevation geometry ($128^2$ to $512^2$ vertices) from luminance ($L = 0.299R + 0.587G + 0.114B$) or contrast energy.
+* **Dynamic Surface Normals**: Computes analytical central differences per-vertex:
+  $$\mathbf{t}_u = (2\Delta u, 0, Z(u+\Delta u, v) - Z(u-\Delta u, v)), \quad \mathbf{t}_v = (0, 2\Delta v, Z(u, v+\Delta v) - Z(u, v-\Delta v))$$
+  $$\mathbf{n} = \text{normalize}(\mathbf{t}_u \times \mathbf{t}_v)$$
+* **Rendering Modes**: Solid Mesh with Blinn-Phong lighting, Point Cloud with circular sprites, and Wireframe.
+* **Multi-View Photogrammetry**: Harris Corner Detection ($R = \det(M) - 0.04 \cdot \text{tr}(M)^2$) and Lowe's ratio test ($d_1 / d_2 < 0.75$) for stereo correspondence.
+* **3D Exports**: Stanford ASCII PLY, Wavefront OBJ, and Medical Binary STL.
 
-## 5. Module B: Medical Reconstruction & Volume Ray-Casting
-
-### 5.1 WebGL2 3D Texture Ray-Caster (`sampler3D`)
-The volume scalar field is uploaded as a `THREE.Data3DTexture` in `RedFormat`. The custom GLSL shader executes ray marching inside a normalized unit bounding box:
-1. **Ray Intersection**: Employs the Slab method to calculate entry point $t_{near}$ and exit point $t_{far}$.
-2. **Ray Marching Loop**: Advances sampling position $\mathbf{x} = \mathbf{x}_0 + t \cdot \mathbf{d}$ at step interval $\Delta t$.
-3. **Clinical Window/Level Mapping**:
-   $$\text{normalized} = \text{clamp}\left(\frac{\text{HU} - (W_L - W_W / 2)}{W_W}, 0.0, 1.0\right)$$
-4. **Rendering Modes**:
-   - **DVR**: Front-to-back compositing with gradient-based illumination:
-     $$C_{accum} = C_{accum} + (1 - A_{accum}) \cdot C_{sample} \cdot A_{sample}, \quad A_{accum} = A_{accum} + (1 - A_{accum}) \cdot A_{sample}$$
-     Includes early ray termination when $A_{accum} \ge 0.98$.
-   - **MIP**: Evaluates maximum intensity along the viewing ray (angiography standard).
-   - **MinIP**: Evaluates minimum intensity along the ray (airway/trachea contrast).
-   - **AvgIP**: Averages density along the ray, simulating digital plain film X-rays.
-
-### 5.2 Synchronized Orthogonal Multi-Planar Reconstruction (MPR)
-Provides 3 simultaneous orthogonal viewports:
-- **Axial (Transverse, XY Plane)**
-- **Coronal (Frontal, XZ Plane)**
-- **Sagittal (Profile, YZ Plane)**
-With synchronized crosshairs indicating slice coordinates across planes in real time.
-
-### 5.3 Anatomical Iso-Surface Extraction
-Applies the Marching Cubes algorithm over the 3D scalar volume at user-selected Hounsfield thresholds (e.g., Bone at $+250\text{ HU}$, Soft tissue at $+30\text{ HU}$).
+### Workspace 4: CPU vs GPU Benchmark
+* **Comparable Operations**: 3x3 Laplacian Sharpening, 5x5 Bilateral Denoising, Color & Gamma Grading, and 2x Resampling.
+* **Execution Rigor**:
+  - CPU implementation executes on `ImageData` (Uint8ClampedArray).
+  - GPU shader runs on WebGL2 texture with warm-up pass and `gl.finish()` synchronization.
+  - Computes Speedup Multiplier ($X\text{x}$), Time Saved (ms), Percentage Time Reduction ($\%$) and Throughput (Megapixels/sec).
+  - All figures are derived strictly from live hardware execution.
 
 ---
 
-## 6. Built-in Offline Sample Data
+## 4. Technology Stack
 
-Both modules function completely offline without external network dependencies:
-- **World Module**: Procedural alpine research laboratory landscape with sky, mountain peaks, water reflections, foliage, and high-contrast foreground geometry.
-- **Medical Module**: High-fidelity 3D CT/MRI Neuro Head Phantom ($128 \times 128 \times 64$ voxels) featuring skull calvarium, gray matter cortex, subcortical white matter, lateral ventricles, and a focal high-contrast hyperdense lesion.
-
----
-
-## 7. Model Export Capabilities
-
-- **World Reconstruction**:
-  - **ASCII PLY Mesh**: Includes full triangular connectivity (`element face`) and vertex colors.
-  - **ASCII PLY Point Cloud**: Vertex cloud with `x, y, z, red, green, blue`.
-  - **Wavefront OBJ**: Geometric vertices `v`, texture coordinates `vt`, normals `vn`, and polygonal faces `f`.
-- **Medical Visualization**:
-  - **Binary STL**: Stereolithography file ready for 3D anatomical printing.
-  - **Binary PLY**: Surface mesh with smooth normals.
-  - **Wavefront OBJ**: Universal polygon mesh.
+* **Frontend**: React 18, TypeScript 5.5, Vite 5, Tailwind CSS, Lucide React.
+* **GPU & Graphics**: WebGL2 (OpenGL ES 3.00), Three.js r165, OrbitControls.
+* **Video & Media**: WebCodecs (`VideoEncoder`, `AudioEncoder`), `mp4-muxer`, HTML5 Canvas & Video APIs.
+* **Zero Backend**: 100% Client-Side sandboxed execution. No images, videos, or user data leave the local browser.
 
 ---
 
-## 8. Installation & Local Execution
+## 5. Local Setup & Production Build
 
-### Prerequisites
-- Node.js (v18+, v20+, or v24+)
-- WebGL2 compatible browser (Chrome, Edge, Firefox, Safari)
-
-### Local Setup
+### Running Locally
 ```bash
-# Clone the repository
-git clone https://github.com/professor-hs/real-time-3d-reconstruction-studio.git
-cd real-time-3d-reconstruction-studio
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev -- --host 0.0.0.0
-
-# Open in browser:
-# http://localhost:5173
+# Open http://localhost:5173/ in your browser
 ```
 
 ### Production Build
 ```bash
 npm run build
-npm run preview
+# Compiles static production bundle into dist/
 ```
 
----
-
-## 9. Netlify Deployment
-
-The project is configured for static zero-backend deployment with `netlify.toml`:
+### Netlify Deployment
+The project includes `netlify.toml` configured for immediate deployment:
 ```toml
 [build]
   command = "npm run build"
   publish = "dist"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 ```
-
-### Deployment Steps:
-1. Push to GitHub (`origin/main`).
-2. Link the repository on [Netlify](https://app.netlify.com).
-3. Netlify automatically executes `npm run build` and serves `dist/`.
-
----
-
-## 10. Limitations & Scientific Disclaimers
-
-> **SCIENTIFIC & CLINICAL NOTICES**:
-> 1. **Heuristic Depth**: Monocular depth reconstruction is an empirical photometric approximation and is not a calibrated physical depth measurement.
-> 2. **Multi-View Parallax**: Photogrammetric triangulation strictly requires translational baseline displacement. Stationary cameras with pure pan/tilt produce zero triangulation disparity.
-> 3. **Medical Disclaimer**: Direct volume rendering and Marching Cubes extractions are computational visualizations intended for research, education, and technical evaluation. They are **not intended for primary clinical diagnosis**.
-> 4. **Hardware Telemetry**: Browser security isolation explicitly restricts access to low-level kernel GPU load counters to protect against timing side-channel attacks.
+Or drag and drop the `dist/` directory into [app.netlify.com/drop](https://app.netlify.com/drop).

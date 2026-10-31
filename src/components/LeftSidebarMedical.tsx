@@ -134,7 +134,7 @@ export const LeftSidebarMedical: React.FC<LeftSidebarMedicalProps> = ({
             </div>
             <div className="flex justify-between items-center text-studio-dim text-[10px]">
               <span>Voxel Spacing:</span>
-              <span className="text-slate-200">{metadata.voxelSpacing.map(s => s.toFixed(1)).join(' × ')} mm</span>
+              <span className="text-slate-200">{metadata.voxelSpacing.map((s: number) => s.toFixed(1)).join(' × ')} mm</span>
             </div>
             <div className="flex justify-between items-center text-studio-dim text-[10px]">
               <span>Slice Count:</span>

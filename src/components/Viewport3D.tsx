@@ -11,11 +11,10 @@ import {
   Boxes,
   Box
 } from 'lucide-react';
-import { StudioModule } from '../types';
 
 interface Viewport3DProps {
   canvasRef: React.RefObject<HTMLCanvasElement>;
-  currentModule: StudioModule;
+  currentModule?: string;
   onResetCamera: () => void;
   isWebGL2Supported: boolean;
   backgroundColor: string;
@@ -26,7 +25,7 @@ interface Viewport3DProps {
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
   canvasRef,
-  currentModule,
+  currentModule = 'world',
   onResetCamera,
   isWebGL2Supported,
   backgroundColor,
